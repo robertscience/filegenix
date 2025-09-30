@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Responsive -->
+    <title>RobertScience - FileGenix</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet"> <!-- Fuente futurista -->
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="d-flex flex-column min-vh-100 justify-content-center align-items-center"> <!-- Centrado vertical y horizontal -->
+        <div class="container text-center">
+            <h1 class="mb-4">RobertScience FileGenix ⚡️</h1>
+            <p class="text-neon mb-4">Sube tus archivos CSV o Excel para procesarlos con tecnología de punta.</p>
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" class="form-control">
+                <p id="uploadText">Arrastra tus archivos aquí o selecciona para subir.</p>
+            </div>
+            <button class="btn btn-neon mt-3" onclick="uploadFiles()">Subir Archivos</button>
+            <div id="preview" class="mt-4"></div>
+            <div id="toast" class="toast align-items-center text-white bg-dark border-neon" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body"></div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadText = document.getElementById('uploadText');
+        const toast = document.getElementById('toast');
+        const toastBody = toast.querySelector('.toast-body');
+        const bootstrapToast = new bootstrap.Toast(toast);
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('highlight');
+            uploadText.textContent = '¡Suelta tus archivos aquí!';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('highlight');
+            uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('highlight');
+            uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
+            fileInput.files = e.dataTransfer.files;
+        });
+
+        async function uploadFiles() {
+            const files = fileInput.files;
+            if (files.length === 0) {
+                showToast('Por favor, selecciona al menos un archivo.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            for (let file of files) {
+                formData.append('files', file);
+            }
+
+            // Mostrar spinner
+            uploadText.innerHTML = '<i class="fas fa-spinner fa-spin text-neon"></i> Subiendo...';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
+
+                if (response.ok) {
+                    showToast('Archivos subidos con éxito.', 'success');
+                    const preview = document.getElementById('preview');
+                    let html = `
+                        <h3 class="text-neon">Archivos Subidos:</h3>
+                        <p><strong>Upload ID:</strong> ${result.upload_id}</p>
+                        <p><strong>Enlace para Grok:</strong> <a href="${result.access_url}" target="_blank" class="text-neon">${result.access_url}</a></p>
+                        <p><strong>Resumen JSON:</strong> <a href="${result.summary_url}" target="_blank" class="text-neon">${result.summary_url}</a></p>
+                        <button class="btn btn-neon mt-2" onclick="copyToClipboard('${result.summary_url}')">Copiar Resumen JSON</button>
+                        <div class="row mt-3 g-3">
+                    `;
+
+                    for (const [filename, data] of Object.entries(result.files)) {
+                        const truncatedName = filename.length > 15 ? filename.substring(0, 12) + '...' : filename;
+                        if (data.error) {
+                            html += `
+                                <div class="col-6 col-md-2 text-center">
+                                    <i class="fas fa-folder text-danger fa-3x folder-icon" data-bs-toggle="tooltip" title="${filename}"></i>
+                                    <p class="text-danger">${truncatedName}</p>
+                                </div>
+                            `;
+                        } else {
+                            html += `
+                                <div class="col-6 col-md-2 text-center">
+                                    <i class="fas fa-folder text-neon fa-3x folder-icon" data-bs-toggle="tooltip" title="${filename}"></i>
+                                    <p>${truncatedName}</p>
+                                </div>
+                            `;
+                        }
+                    }
+                    html += '</div>';
+                    preview.innerHTML = html;
+
+                    // Inicializar tooltips
+                    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                    tooltipTriggerList.map(function (tooltipTriggerEl) {
+                        return new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
+                } else {
+                    showToast('Error al subir archivos: ' + result.error, 'error');
+                }
+            } catch (error) {
+                uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
+                showToast('Error al subir archivos: ' + error.message, 'error');
+            }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Enlace copiado al portapapeles.', 'success');
+            }).catch(() => {
+                showToast('Error al copiar el enlace.', 'error');
+            });
+        }
+
+        function showToast(message, type) {
+            toast.classList.remove('border-neon-success', 'border-neon-error');
+            toast.classList.add(type === 'success' ? 'border-neon-success' : 'border-neon-error');
+            toastBody.textContent = message;
+            bootstrapToast.show();
+        }
+    </script>
+</body>
+</html>

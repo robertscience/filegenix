@@ -1,0 +1,133 @@
+body {
+    background: linear-gradient(135deg, #1a1a1a, #2c2c2c);
+    color: #ffffff;
+    font-family: 'Orbitron', sans-serif; /* Fuente futurista */
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 900px;
+    padding: 15px; /* Mejor padding para móviles */
+}
+
+h1 {
+    color: #ff00ff;
+    text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 30px #ff00ff;
+    font-weight: 700;
+    font-size: 2.5rem; /* Tamaño ajustado para móviles */
+}
+
+p {
+    font-size: 1rem; /* Tamaño legible en móviles */
+}
+
+.upload-area {
+    border: 2px dashed #00ffcc;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 15px;
+    text-align: center;
+    transition: all 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.upload-area.highlight {
+    background: rgba(0, 255, 204, 0.2);
+    border-color: #00ffcc;
+    box-shadow: 0 0 15px #00ffcc;
+}
+
+.form-control {
+    background: #333;
+    color: #fff;
+    border: 1px solid #00ffcc;
+    border-radius: 10px;
+}
+
+.btn-neon {
+    background: #ff00ff;
+    border: none;
+    box-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 30px #ff00ff;
+    color: #fff;
+    font-weight: bold;
+    padding: 10px 20px;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.btn-neon:hover {
+    background: #00ffcc;
+    box-shadow: 0 0 15px #00ffcc, 0 0 25px #00ffcc, 0 0 35px #00ffcc;
+}
+
+.text-neon {
+    color: #00ffcc;
+    text-shadow: 0 0 5px #00ffcc, 0 0 10px #00ffcc;
+}
+
+.fa-folder {
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+    animation: pulse 2s infinite; /* Animación de pulso */
+}
+
+.fa-folder.text-neon {
+    box-shadow: 0 0 10px #00ffcc, 0 0 20px #00ffcc, 0 0 30px #00ffcc;
+}
+
+.fa-folder.text-danger {
+    box-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 30px #ff0000;
+}
+
+.fa-folder:hover {
+    transform: scale(1.1); /* Zoom al pasar el ratón */
+    box-shadow: 0 0 15px #ff00ff, 0 0 25px #ff00ff, 0 0 35px #ff00ff;
+}
+
+.fa-spinner {
+    font-size: 1.5rem;
+}
+
+/* Animación de pulso para íconos */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Toast neón */
+.toast {
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 10px;
+}
+
+.border-neon-success {
+    border: 2px solid #00ffcc;
+    box-shadow: 0 0 10px #00ffcc;
+}
+
+.border-neon-error {
+    border: 2px solid #ff0000;
+    box-shadow: 0 0 10px #ff0000;
+}
+
+/* Ajustes para móviles */
+@media (max-width: 576px) {
+    h1 {
+        font-size: 1.8rem;
+    }
+    p {
+        font-size: 0.9rem;
+    }
+    .btn-neon {
+        padding: 8px 15px;
+        font-size: 0.9rem;
+    }
+    .upload-area {
+        padding: 15px;
+    }
+    .fa-folder {
+        font-size: 2rem;
+    }
+}
