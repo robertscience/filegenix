@@ -12,7 +12,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Configurar logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls'}
@@ -55,13 +55,18 @@ def upload_files():
                 continue
             seen_filenames.add(filename)
             file_path = os.path.join(upload_path, filename)
-            logger.debug(f"Original: {original_filename}, Guardado como: {filename}")
+            logger.debug(f"Original: {original_filename}, Guardado como: {filename}, Ruta: {file_path}")
             file.save(file_path)
             try:
                 if filename.endswith('.csv'):
                     df = pd.read_csv(file_path, encoding='utf-8')
                 elif filename.endswith(('.xlsx', '.xls')):
-                    df = pd.read_excel(file_path, engine='openpyxl')
+                    try:
+                        df = pd.read_excel(file_path, engine='openpyxl')
+                    except Exception as e:
+                        logger.error(f"Error con openpyxl en {original_filename}: {str(e)}", exc_info=True)
+                        # Intento alternativo con encoding
+                        df = pd.read_excel(file_path, engine='openpyxl', encoding='latin1')
                 results[original_filename] = {
                     'columns': df.columns.tolist(),
                     'shape': df.shape,
@@ -69,7 +74,7 @@ def upload_files():
                     'file_url': f'/files/{upload_id}/{filename}',
                     'json_url': f'/files/{upload_id}/{filename}.json'
                 }
-                logger.debug(f"Procesado {original_filename}: {df.shape}")
+                logger.debug(f"Procesado {original_filename}: {df.shape}, Columnas: {df.columns.tolist()}")
                 json_path = os.path.join(upload_path, f"{filename}.json")
                 df.to_json(json_path, orient='records', lines=True)
             except Exception as e:
