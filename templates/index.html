@@ -13,7 +13,7 @@
     <div class="d-flex flex-column min-vh-100 justify-content-center align-items-center">
         <div class="container text-center">
             <h1 class="mb-4">RobertScience FileGenix ⚡</h1>
-            <p class="text-neon mb-4">Sube tus archivos CSV o Excel para procesarlos con tecnología de punta.</p>
+            <p class="text-neon mb-4">Sube tus archivos CSV o Excel para procesarlos y generar un enlace en la nube.</p>
             <div class="upload-area" id="uploadArea">
                 <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" class="form-control">
                 <p id="uploadText">Arrastra tus archivos aquí o selecciona para subir.</p>
@@ -94,17 +94,9 @@
                 uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
 
                 if (response.ok) {
-                    showToast('Archivos subidos con éxito.', 'success');
+                    showToast('Archivos subidos con éxito. El enlace estará disponible tras el despliegue.', 'success');
                     const preview = document.getElementById('preview');
-                    let html = `
-                        <h3 class="text-neon">Archivos Subidos:</h3>
-                        <p><strong>Upload ID:</strong> ${result.upload_id}</p>
-                        <p><strong>Enlace para Grok:</strong> <a href="${result.access_url}" target="_blank" class="text-neon">${result.access_url}</a></p>
-                        <p><strong>Resumen JSON:</strong> <a href="${result.summary_url}" target="_blank" class="text-neon">${result.summary_url}</a></p>
-                        <button class="btn btn-neon mt-2" onclick="copyToClipboard('${result.summary_url}')">Copiar Resumen JSON</button>
-                        <div class="row mt-3 g-3">
-                    `;
-
+                    let html = `<h3 class="text-neon">Archivos Subidos:</h3><div class="row mt-3 g-3">`;
                     for (const [filename, data] of Object.entries(result.files)) {
                         const truncatedName = filename.length > 15 ? filename.substring(0, 12) + '...' : filename;
                         if (data.error) {
@@ -138,14 +130,6 @@
                 uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
                 showToast('Error al subir archivos: ' + error.message, 'error');
             }
-        }
-
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('Enlace copiado al portapapeles.', 'success');
-            }).catch(() => {
-                showToast('Error al copiar el enlace.', 'error');
-            });
         }
 
         function showToast(message, type) {
