@@ -76,13 +76,11 @@ def upload_files():
                 if filename.endswith('.csv'):
                     df = pd.read_csv(file_path, encoding='utf-8')
                 elif filename.endswith(('.xlsx', '.xls')):
-                    # Validar archivo Excel
                     is_valid, sheet_info = validate_xlsx(file_path, original_filename)
                     if not is_valid:
                         logger.error(f"Validación fallida para {original_filename}: {sheet_info}")
                         results[original_filename] = {'error': sheet_info}
                         continue
-                    # Intentar con múltiples engines y hojas
                     engines = ['openpyxl', 'xlrd', 'calamine']
                     df = None
                     for engine in engines:
@@ -93,7 +91,6 @@ def upload_files():
                         except Exception as e:
                             logger.error(f"Error con engine {engine} en {original_filename}: {str(e)}", exc_info=True)
                     if df is None:
-                        # Intentar cada hoja
                         for sheet_name in sheet_info:
                             try:
                                 df = pd.read_excel(file_path, engine='openpyxl', sheet_name=sheet_name)
@@ -125,7 +122,6 @@ def upload_files():
     return jsonify({
         'upload_id': upload_id,
         'files': results,
-        'access_url': f'/files/{upload_id}',
         'summary_url': f'/files/{upload_id}/summary.json'
     })
 
