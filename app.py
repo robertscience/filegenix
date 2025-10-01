@@ -119,10 +119,14 @@ def upload_files():
         json.dump({'upload_id': upload_id, 'files': results}, f)
     logger.debug(f"Resumen guardado: {summary_path}")
 
+    # Generar URL absoluta
+    base_url = request.url_root.rstrip('/')
+    summary_url = f"{base_url}/files/{upload_id}/summary.json"
+
     return jsonify({
         'upload_id': upload_id,
         'files': results,
-        'summary_url': f'/files/{upload_id}/summary.json'
+        'summary_url': summary_url
     })
 
 @app.route('/files/<upload_id>/<filename>', methods=['GET'])
