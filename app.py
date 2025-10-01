@@ -44,33 +44,38 @@ def upload_files():
     logger.debug(f"Carpeta creada: {upload_path}")
 
     results = {}
+    seen_filenames = set()
     for file in files:
         if file and allowed_file(file.filename):
+            original_filename = file.filename
             filename = secure_filename(file.filename)
+            if filename in seen_filenames:
+                logger.warning(f"Archivo duplicado ignorado: {original_filename}")
+                results[original_filename] = {'error': 'Duplicate file name'}
+                continue
+            seen_filenames.add(filename)
             file_path = os.path.join(upload_path, filename)
-            logger.debug(f"Guardando archivo: {filename}")
+            logger.debug(f"Original: {original_filename}, Guardado como: {filename}")
             file.save(file_path)
             try:
                 if filename.endswith('.csv'):
-                    df = pd.read_csv(file_path)
+                    df = pd.read_csv(file_path, encoding='utf-8')
                 elif filename.endswith(('.xlsx', '.xls')):
-                    df = pd.read_excel(file_path)
-                results[filename] = {
+                    df = pd.read_excel(file_path, engine='openpyxl')
+                results[original_filename] = {
                     'columns': df.columns.tolist(),
                     'shape': df.shape,
                     'nulls': df.isnull().sum().to_dict(),
                     'file_url': f'/files/{upload_id}/{filename}',
                     'json_url': f'/files/{upload_id}/{filename}.json'
                 }
-                logger.debug(f"Procesado {filename}: {df.shape}")
-                # Guardar datos completos como JSON
+                logger.debug(f"Procesado {original_filename}: {df.shape}")
                 json_path = os.path.join(upload_path, f"{filename}.json")
                 df.to_json(json_path, orient='records', lines=True)
             except Exception as e:
-                logger.error(f"Error al procesar {filename}: {str(e)}")
-                results[filename] = {'error': f'Failed to process: {str(e)}'}
+                logger.error(f"Error al procesar {original_filename}: {str(e)}", exc_info=True)
+                results[original_filename] = {'error': f'Failed to process: {str(e)}'}
 
-    # Guardar resumen
     summary_path = os.path.join(upload_path, 'summary.json')
     with open(summary_path, 'w') as f:
         json.dump({'upload_id': upload_id, 'files': results}, f)

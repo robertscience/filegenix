@@ -62,8 +62,24 @@
                 return;
             }
 
-            const formData = new FormData();
+            const fileNames = new Set();
+            const uniqueFiles = [];
             for (let file of files) {
+                if (fileNames.has(file.name)) {
+                    showToast(`Archivo duplicado: ${file.name}`, 'error');
+                    continue;
+                }
+                fileNames.add(file.name);
+                uniqueFiles.push(file);
+            }
+
+            if (uniqueFiles.length === 0) {
+                showToast('No se seleccionaron archivos válidos.', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            for (let file of uniqueFiles) {
                 formData.append('files', file);
             }
 
