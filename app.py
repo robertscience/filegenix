@@ -5,6 +5,8 @@ import os
 import uuid
 import json
 import logging
+import openpyxl
+from zipfile import ZipFile, BadZipFile
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'Uploads'
@@ -19,6 +21,19 @@ ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def validate_xlsx(file_path, filename):
+    try:
+        workbook = openpyxl.load_workbook(file_path, read_only=True)
+        sheet_names = workbook.sheetnames
+        logger.debug(f"Hojas en {filename}: {sheet_names}")
+        if not sheet_names:
+            return False, "No sheets found in the Excel file"
+        return True, None
+    except BadZipFile:
+        return False, "Corrupted or invalid Excel file"
+    except Exception as e:
+        return False, f"Validation error: {str(e)}"
 
 @app.route('/')
 def index():
@@ -61,12 +76,24 @@ def upload_files():
                 if filename.endswith('.csv'):
                     df = pd.read_csv(file_path, encoding='utf-8')
                 elif filename.endswith(('.xlsx', '.xls')):
-                    try:
-                        df = pd.read_excel(file_path, engine='openpyxl')
-                    except Exception as e:
-                        logger.error(f"Error con openpyxl en {original_filename}: {str(e)}", exc_info=True)
-                        # Intento alternativo con encoding
-                        df = pd.read_excel(file_path, engine='openpyxl', encoding='latin1')
+                    # Validar archivo Excel
+                    is_valid, error_msg = validate_xlsx(file_path, original_filename)
+                    if not is_valid:
+                        logger.error(f"Validación fallida para {original_filename}: {error_msg}")
+                        results[original_filename] = {'error': error_msg}
+                        continue
+                    # Intentar con múltiples engines
+                    engines = ['openpyxl', 'xlrd', 'calamine']
+                    df = None
+                    for engine in engines:
+                        try:
+                            df = pd.read_excel(file_path, engine=engine)
+                            logger.debug(f"Éxito con engine {engine} para {original_filename}")
+                            break
+                        except Exception as e:
+                            logger.error(f"Error con engine {engine} en {original_filename}: {str(e)}", exc_info=True)
+                    if df is None:
+                        raise Exception("All engines failed to read the Excel file")
                 results[original_filename] = {
                     'columns': df.columns.tolist(),
                     'shape': df.shape,
