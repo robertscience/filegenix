@@ -9,9 +9,9 @@ import openpyxl
 from zipfile import ZipFile, BadZipFile
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'Uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = 'Uploads'
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Configurar logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -29,7 +29,7 @@ def validate_xlsx(file_path, filename):
         logger.debug(f"Hojas en {filename}: {sheet_names}")
         if not sheet_names:
             return False, "No sheets found in the Excel file"
-        return True, None
+        return True, sheet_names
     except BadZipFile:
         return False, "Corrupted or invalid Excel file"
     except Exception as e:
@@ -77,12 +77,12 @@ def upload_files():
                     df = pd.read_csv(file_path, encoding='utf-8')
                 elif filename.endswith(('.xlsx', '.xls')):
                     # Validar archivo Excel
-                    is_valid, error_msg = validate_xlsx(file_path, original_filename)
+                    is_valid, sheet_info = validate_xlsx(file_path, original_filename)
                     if not is_valid:
-                        logger.error(f"Validación fallida para {original_filename}: {error_msg}")
-                        results[original_filename] = {'error': error_msg}
+                        logger.error(f"Validación fallida para {original_filename}: {sheet_info}")
+                        results[original_filename] = {'error': sheet_info}
                         continue
-                    # Intentar con múltiples engines
+                    # Intentar con múltiples engines y hojas
                     engines = ['openpyxl', 'xlrd', 'calamine']
                     df = None
                     for engine in engines:
@@ -93,7 +93,16 @@ def upload_files():
                         except Exception as e:
                             logger.error(f"Error con engine {engine} en {original_filename}: {str(e)}", exc_info=True)
                     if df is None:
-                        raise Exception("All engines failed to read the Excel file")
+                        # Intentar cada hoja
+                        for sheet_name in sheet_info:
+                            try:
+                                df = pd.read_excel(file_path, engine='openpyxl', sheet_name=sheet_name)
+                                logger.debug(f"Éxito con hoja {sheet_name} para {original_filename}")
+                                break
+                            except Exception as e:
+                                logger.error(f"Error con hoja {sheet_name} en {original_filename}: {str(e)}", exc_info=True)
+                        if df is None:
+                            raise Exception("All engines and sheets failed to read the Excel file")
                 results[original_filename] = {
                     'columns': df.columns.tolist(),
                     'shape': df.shape,
