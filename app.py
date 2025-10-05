@@ -9,7 +9,7 @@ import openpyxl
 from zipfile import ZipFile, BadZipFile
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'Uploads'
+app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_DIR', 'Uploads')  # Fallback local: 'Uploads', prod: env var de Render
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
