@@ -157,7 +157,7 @@ def get_upload_summary(upload_id):
 def preview_page():
     return render_template('preview/index.html')
 
-# Función para Get Diff Data (Integrada, Unlimited Chunks – Fix read_json low_memory)
+# Función para Get Diff Data (Integrada, Unlimited Chunks – Fix Final read_json low_memory)
 def get_diff_data(upload_id, step='raw'):
     try:
         summary_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, 'summary.json')
@@ -167,11 +167,10 @@ def get_diff_data(upload_id, step='raw'):
         with open(summary_path, 'r') as f:
             summary = json.load(f)
         
-        # Carga FACT_SALES full (principal, unlimited – fix basename case)
+        # Carga FACT_SALES full (principal, unlimited – basename lower case)
         fact_file = next((f for f in summary['files'].values() if 'FACT_SALES' in f['file_url']), None)
         if not fact_file:
             raise Exception("FACT_SALES not found")
-        # Fix basename: Usa filename de file_url + .json, lower case for Render
         base_name = os.path.basename(fact_file['file_url']).lower().replace('.csv', '') + '.json'
         fact_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name)
         logger.debug(f"Buscando FACT JSON en: {fact_json_path}")
@@ -181,7 +180,7 @@ def get_diff_data(upload_id, step='raw'):
             fact_lines = f.readlines()
         before_str = ''.join(fact_lines)
         
-        fact_df = pd.read_json(StringIO(before_str), lines=True)  # Fix: Quita low_memory=False
+        fact_df = pd.read_json(StringIO(before_str), lines=True)  # Fix Final: Quita low_memory=False
         
         # Aplica step
         if step == 'limpio':
@@ -195,7 +194,7 @@ def get_diff_data(upload_id, step='raw'):
                 if os.path.exists(prod_json_path):
                     with open(prod_json_path, 'r') as f:
                         prod_lines = f.readlines()
-                    prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True)  # Fix: Quita low_memory=False
+                    prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True)  # Fix Final: Quita low_memory=False
                     fact_df = pd.merge(fact_df, prod_df, left_on='ITEM_CODE', right_on='ITEM', how='left')
                 else:
                     logger.warning(f"PROD JSON not found: {prod_json_path}")
@@ -207,7 +206,7 @@ def get_diff_data(upload_id, step='raw'):
                 if os.path.exists(cat_json_path):
                     with open(cat_json_path, 'r') as f:
                         cat_lines = f.readlines()
-                    cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True)  # Fix: Quita low_memory=False
+                    cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True)  # Fix Final: Quita low_memory=False
                     fact_df = pd.merge(fact_df, cat_df, on='CATEGORY', how='left')
             # Similar para SEGMENT y CALENDAR (agrega si keys calzan)
         elif step == 'transform':
@@ -232,7 +231,7 @@ def diff_data(upload_id):
     step = request.args.get('step', 'raw')
     return get_diff_data(upload_id, step)
 
-# Ruta para Download ZIP (Multi-Files si Aplica)
+# Ruta para Download ZIP (Multi-Files si Aplica – Fix read_json low_memory)
 @app.route('/preview/download/<upload_id>')
 def download_work(upload_id):
     step = request.args.get('step', 'transform')
@@ -241,7 +240,7 @@ def download_work(upload_id):
         return data_response
     data = data_response.get_json()
     after_str = data['after']
-    after_df = pd.read_json(StringIO(after_str), lines=True)  # Fix: Quita low_memory=False
+    after_df = pd.read_json(StringIO(after_str), lines=True)  # Fix Final: Quita low_memory=False
     
     # ZIP con multi-files si hay merges (CSV, JSON, Notebook)
     memory_file = BytesIO()
@@ -270,7 +269,7 @@ def download_work(upload_id):
                 if os.path.exists(dim_json_path):
                     with open(dim_json_path, 'r') as f:
                         dim_str = f.read()
-                    dim_df = pd.read_json(StringIO(dim_str), lines=True)  # Fix: Quita low_memory=False
+                    dim_df = pd.read_json(StringIO(dim_str), lines=True)  # Fix Final: Quita low_memory=False
                     zf.writestr(f"{os.path.splitext(filename)[0]}.csv", dim_df.to_csv(index=False))
     
     memory_file.seek(0)
