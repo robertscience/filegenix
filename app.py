@@ -87,7 +87,7 @@ def upload_files():
                     df = None
                     for engine in engines:
                         try:
-                            df = pd.read_excel(file_path, engine=engine, low_memory=False)
+                            df = pd.read_excel(file_path, engine=engine)  # Fix: Quita low_memory=False
                             logger.debug(f"Éxito con engine {engine} para {original_filename}")
                             break
                         except Exception as e:
@@ -95,7 +95,7 @@ def upload_files():
                     if df is None:
                         for sheet_name in sheet_info:
                             try:
-                                df = pd.read_excel(file_path, engine='openpyxl', sheet_name=sheet_name, low_memory=False)
+                                df = pd.read_excel(file_path, engine='openpyxl', sheet_name=sheet_name)  # Fix: Quita low_memory=False
                                 logger.debug(f"Éxito con hoja {sheet_name} para {original_filename}")
                                 break
                             except Exception as e:
