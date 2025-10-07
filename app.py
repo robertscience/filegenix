@@ -87,7 +87,7 @@ def upload_files():
                     df = None
                     for engine in engines:
                         try:
-                            df = pd.read_excel(file_path, engine=engine)  # Fix: Quita low_memory=False
+                            df = pd.read_excel(file_path, engine=engine)
                             logger.debug(f"Éxito con engine {engine} para {original_filename}")
                             break
                         except Exception as e:
@@ -95,7 +95,7 @@ def upload_files():
                     if df is None:
                         for sheet_name in sheet_info:
                             try:
-                                df = pd.read_excel(file_path, engine='openpyxl', sheet_name=sheet_name)  # Fix: Quita low_memory=False
+                                df = pd.read_excel(file_path, engine='openpyxl', sheet_name=sheet_name)
                                 logger.debug(f"Éxito con hoja {sheet_name} para {original_filename}")
                                 break
                             except Exception as e:
@@ -157,7 +157,7 @@ def get_upload_summary(upload_id):
 def preview_page():
     return render_template('preview/index.html')
 
-# Función para Get Diff Data (Integrada, Unlimited Chunks – Fix Final read_json low_memory)
+# Función para Get Diff Data (Integrada, Unlimited Chunks – Graceful, No low_memory)
 def get_diff_data(upload_id, step='raw'):
     try:
         summary_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, 'summary.json')
@@ -180,35 +180,48 @@ def get_diff_data(upload_id, step='raw'):
             fact_lines = f.readlines()
         before_str = ''.join(fact_lines)
         
-        fact_df = pd.read_json(StringIO(before_str), lines=True)  # Fix Final: Quita low_memory=False
+        fact_df = pd.read_json(StringIO(before_str), lines=True)  # Graceful: No low_memory
         
-        # Aplica step
+        # Aplica step with try/except for graceful merges
         if step == 'limpio':
             fact_df = fact_df.dropna(subset=['ITEM_CODE']).drop_duplicates()
         elif step == 'merged':
-            prod_file = next((f for f in summary['files'].values() if 'DIM_PRODUCT' in f['file_url']), None)
-            if prod_file:
-                base_name_prod = os.path.basename(prod_file['file_url']).lower().replace('.xlsx', '') + '.json'
-                prod_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_prod)
-                logger.debug(f"Buscando PROD JSON en: {prod_json_path}")
-                if os.path.exists(prod_json_path):
-                    with open(prod_json_path, 'r') as f:
-                        prod_lines = f.readlines()
-                    prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True)  # Fix Final: Quita low_memory=False
-                    fact_df = pd.merge(fact_df, prod_df, left_on='ITEM_CODE', right_on='ITEM', how='left')
-                else:
-                    logger.warning(f"PROD JSON not found: {prod_json_path}")
-            # Merge otras DIMs similar (CATEGORY, SEGMENT, CALENDAR)
-            cat_file = next((f for f in summary['files'].values() if 'DIM_CATEGORY' in f['file_url']), None)
-            if cat_file:
-                base_name_cat = os.path.basename(cat_file['file_url']).lower().replace('.csv', '') + '.json'
-                cat_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_cat)
-                if os.path.exists(cat_json_path):
-                    with open(cat_json_path, 'r') as f:
-                        cat_lines = f.readlines()
-                    cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True)  # Fix Final: Quita low_memory=False
-                    fact_df = pd.merge(fact_df, cat_df, on='CATEGORY', how='left')
-            # Similar para SEGMENT y CALENDAR (agrega si keys calzan)
+            # Try merge DIM_PRODUCT
+            try:
+                prod_file = next((f for f in summary['files'].values() if 'DIM_PRODUCT' in f['file_url']), None)
+                if prod_file:
+                    base_name_prod = os.path.basename(prod_file['file_url']).lower().replace('.xlsx', '') + '.json'
+                    prod_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_prod)
+                    logger.debug(f"Buscando PROD JSON en: {prod_json_path}")
+                    if os.path.exists(prod_json_path):
+                        with open(prod_json_path, 'r') as f:
+                            prod_lines = f.readlines()
+                        prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True)  # Graceful: No low_memory
+                        fact_df = pd.merge(fact_df, prod_df, left_on='ITEM_CODE', right_on='ITEM', how='left')
+                        logger.debug(f"Merge PRODUCT: {fact_df.shape[0]} rows")
+                    else:
+                        logger.warning(f"PROD JSON not found: {prod_json_path}")
+            except Exception as e:
+                logger.error(f"Merge PRODUCT fail: {str(e)}")
+            
+            # Try merge DIM_CATEGORY
+            try:
+                cat_file = next((f for f in summary['files'].values() if 'DIM_CATEGORY' in f['file_url']), None)
+                if cat_file:
+                    base_name_cat = os.path.basename(cat_file['file_url']).lower().replace('.csv', '') + '.json'
+                    cat_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_cat)
+                    if os.path.exists(cat_json_path):
+                        with open(cat_json_path, 'r') as f:
+                            cat_lines = f.readlines()
+                        cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True)  # Graceful: No low_memory
+                        fact_df = pd.merge(fact_df, cat_df, on='CATEGORY', how='left')
+                        logger.debug(f"Merge CATEGORY: {fact_df.shape[0]} rows")
+                    else:
+                        logger.warning(f"CAT JSON not found: {cat_json_path}")
+            except Exception as e:
+                logger.error(f"Merge CATEGORY fail: {str(e)}")
+            
+            # Similar for SEGMENT and CALENDAR (graceful skip if fail)
         elif step == 'transform':
             fact_df['WEEK'] = pd.to_datetime(fact_df['WEEK'], errors='coerce')
             if 'ITEM_DESCRIPTION' in fact_df.columns:
@@ -231,7 +244,7 @@ def diff_data(upload_id):
     step = request.args.get('step', 'raw')
     return get_diff_data(upload_id, step)
 
-# Ruta para Download ZIP (Multi-Files si Aplica – Fix read_json low_memory)
+# Ruta para Download ZIP (Multi-Files si Aplica – Graceful read_json)
 @app.route('/preview/download/<upload_id>')
 def download_work(upload_id):
     step = request.args.get('step', 'transform')
@@ -240,7 +253,7 @@ def download_work(upload_id):
         return data_response
     data = data_response.get_json()
     after_str = data['after']
-    after_df = pd.read_json(StringIO(after_str), lines=True)  # Fix Final: Quita low_memory=False
+    after_df = pd.read_json(StringIO(after_str), lines=True)  # Graceful: No low_memory
     
     # ZIP con multi-files si hay merges (CSV, JSON, Notebook)
     memory_file = BytesIO()
@@ -258,19 +271,22 @@ def download_work(upload_id):
             "nbformat": 4, "nbformat_minor": 5
         }
         zf.writestr('Entregable1_Proyecto.ipynb', json.dumps(nb_content))
-        # Si múltiples DIMs, agrega sus CSVs
-        summary_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, 'summary.json')
-        with open(summary_path, 'r') as f:
-            summary = json.load(f)
-        for filename, info in summary['files'].items():
-            if 'DIM' in filename and not info.get('error'):
-                base_name_dim = os.path.basename(info['file_url']).lower().replace('.xlsx', '').replace('.csv', '') + '.json'
-                dim_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_dim)
-                if os.path.exists(dim_json_path):
-                    with open(dim_json_path, 'r') as f:
-                        dim_str = f.read()
-                    dim_df = pd.read_json(StringIO(dim_str), lines=True)  # Fix Final: Quita low_memory=False
-                    zf.writestr(f"{os.path.splitext(filename)[0]}.csv", dim_df.to_csv(index=False))
+        # Si múltiples DIMs, agrega sus CSVs (graceful)
+        try:
+            summary_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, 'summary.json')
+            with open(summary_path, 'r') as f:
+                summary = json.load(f)
+            for filename, info in summary['files'].items():
+                if 'DIM' in filename and not info.get('error'):
+                    base_name_dim = os.path.basename(info['file_url']).lower().replace('.xlsx', '').replace('.csv', '') + '.json'
+                    dim_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_dim)
+                    if os.path.exists(dim_json_path):
+                        with open(dim_json_path, 'r') as f:
+                            dim_str = f.read()
+                        dim_df = pd.read_json(StringIO(dim_str), lines=True)  # Graceful: No low_memory
+                        zf.writestr(f"{os.path.splitext(filename)[0]}.csv", dim_df.to_csv(index=False))
+        except Exception as e:
+            logger.warning(f"ZIP DIMs fail: {str(e)}")
     
     memory_file.seek(0)
     return send_file(memory_file, as_attachment=True, download_name='RobertScience_Turbo_Preview.zip', mimetype='application/zip')
