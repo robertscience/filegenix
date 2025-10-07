@@ -157,23 +157,31 @@ def get_upload_summary(upload_id):
 def preview_page():
     return render_template('preview/index.html')
 
-# Función para Get Diff Data (Integrada, Unlimited Chunks)
+# Función para Get Diff Data (Integrada, Unlimited Chunks – Fix read_json low_memory)
 def get_diff_data(upload_id, step='raw'):
     try:
         summary_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, 'summary.json')
+        logger.debug(f"Buscando summary en: {summary_path}")
+        if not os.path.exists(summary_path):
+            raise Exception(f"Summary not found: {summary_path}")
         with open(summary_path, 'r') as f:
             summary = json.load(f)
         
-        # Carga FACT_SALES full (principal, unlimited)
+        # Carga FACT_SALES full (principal, unlimited – fix basename case)
         fact_file = next((f for f in summary['files'].values() if 'FACT_SALES' in f['file_url']), None)
         if not fact_file:
             raise Exception("FACT_SALES not found")
-        fact_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, os.path.basename(fact_file['json_url']))
+        # Fix basename: Usa filename de file_url + .json, lower case for Render
+        base_name = os.path.basename(fact_file['file_url']).lower().replace('.csv', '') + '.json'
+        fact_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name)
+        logger.debug(f"Buscando FACT JSON en: {fact_json_path}")
+        if not os.path.exists(fact_json_path):
+            raise Exception(f"FACT JSON not found: {fact_json_path}")
         with open(fact_json_path, 'r') as f:
             fact_lines = f.readlines()
         before_str = ''.join(fact_lines)
         
-        fact_df = pd.read_json(StringIO(before_str), lines=True, low_memory=False)
+        fact_df = pd.read_json(StringIO(before_str), lines=True)  # Fix: Quita low_memory=False
         
         # Aplica step
         if step == 'limpio':
@@ -181,19 +189,26 @@ def get_diff_data(upload_id, step='raw'):
         elif step == 'merged':
             prod_file = next((f for f in summary['files'].values() if 'DIM_PRODUCT' in f['file_url']), None)
             if prod_file:
-                prod_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, os.path.basename(prod_file['json_url']))
-                with open(prod_json_path, 'r') as f:
-                    prod_lines = f.readlines()
-                prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True, low_memory=False)
-                fact_df = pd.merge(fact_df, prod_df, left_on='ITEM_CODE', right_on='ITEM', how='left')
-            # Merge otras DIMs si existen (CATEGORY, SEGMENT, CALENDAR)
+                base_name_prod = os.path.basename(prod_file['file_url']).lower().replace('.xlsx', '') + '.json'
+                prod_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_prod)
+                logger.debug(f"Buscando PROD JSON en: {prod_json_path}")
+                if os.path.exists(prod_json_path):
+                    with open(prod_json_path, 'r') as f:
+                        prod_lines = f.readlines()
+                    prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True)  # Fix: Quita low_memory=False
+                    fact_df = pd.merge(fact_df, prod_df, left_on='ITEM_CODE', right_on='ITEM', how='left')
+                else:
+                    logger.warning(f"PROD JSON not found: {prod_json_path}")
+            # Merge otras DIMs similar (CATEGORY, SEGMENT, CALENDAR)
             cat_file = next((f for f in summary['files'].values() if 'DIM_CATEGORY' in f['file_url']), None)
             if cat_file:
-                cat_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, os.path.basename(cat_file['json_url']))
-                with open(cat_json_path, 'r') as f:
-                    cat_lines = f.readlines()
-                cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True, low_memory=False)
-                fact_df = pd.merge(fact_df, cat_df, on='CATEGORY', how='left')
+                base_name_cat = os.path.basename(cat_file['file_url']).lower().replace('.csv', '') + '.json'
+                cat_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_cat)
+                if os.path.exists(cat_json_path):
+                    with open(cat_json_path, 'r') as f:
+                        cat_lines = f.readlines()
+                    cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True)  # Fix: Quita low_memory=False
+                    fact_df = pd.merge(fact_df, cat_df, on='CATEGORY', how='left')
             # Similar para SEGMENT y CALENDAR (agrega si keys calzan)
         elif step == 'transform':
             fact_df['WEEK'] = pd.to_datetime(fact_df['WEEK'], errors='coerce')
@@ -222,23 +237,23 @@ def diff_data(upload_id):
 def download_work(upload_id):
     step = request.args.get('step', 'transform')
     data_response = get_diff_data(upload_id, step)
-    if 'error' in data_response.get_json():
-        return jsonify(data_response.get_json()), 500
+    if data_response.status_code != 200:
+        return data_response
     data = data_response.get_json()
     after_str = data['after']
-    after_df = pd.read_json(StringIO(after_str), lines=True, low_memory=False)
+    after_df = pd.read_json(StringIO(after_str), lines=True)  # Fix: Quita low_memory=False
     
     # ZIP con multi-files si hay merges (CSV, JSON, Notebook)
     memory_file = BytesIO()
     with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr('data_consolidada.csv', after_df.to_csv(index=False))  # CSV principal
+        zf.writestr('data_consolidados.csv', after_df.to_csv(index=False))  # CSV principal
         zf.writestr('merged_data.json', after_str)  # JSON full
         # Notebook básico con plots
         nb_content = {
             "cells": [
-                {"cell_type": "markdown", "source": ["# Entregable Preview - RobertScience DS\nTurbo Análisis de Ventas\nFecha: Octubre 2025"]},
-                {"cell_type": "code", "source": ["import pandas as pd\nimport matplotlib.pyplot as plt\n\ndf = pd.read_csv('data_consolidada.csv')\nprint('Shape:', df.shape)\nprint('Top Revenue por Categoría:')\nprint(df.groupby('CATEGORY')['REVENUE'].sum().sort_values(ascending=False))\n\n# Plot rock\nplt.figure(figsize=(10,6))\ndf.groupby('CATEGORY')['REVENUE'].sum().plot(kind='bar', color=['#ff00ff', '#00ffcc'])\nplt.title('Revenue por Categoría - RobertScience DS')\nplt.ylabel('Revenue ($)')\nplt.xticks(rotation=45)\nplt.tight_layout()\nplt.show()"], "outputs": []},
-                {"cell_type": "markdown", "source": ["## Recomendaciones\nPriorizar stock en categorías top para uplift 15%. Desarrollado por RobertScience DS.\nContacto: info@robertscience.com"]}
+                {"cell_type": "markdown", "source": ["# Entregable Preview - RobertScience DS\\nTurbo Análisis de Ventas\\nFecha: Octubre 2025"]},
+                {"cell_type": "code", "source": ["import pandas as pd\\nimport matplotlib.pyplot as plt\\n\\ndf = pd.read_csv('data_consolidados.csv')\\nprint('Shape:', df.shape)\\nprint('Top Revenue por Categoría:')\\nprint(df.groupby('CATEGORY')['REVENUE'].sum().sort_values(ascending=False))\\n\\n# Plot rock\\nplt.figure(figsize=(10,6))\\ndf.groupby('CATEGORY')['REVENUE'].sum().plot(kind='bar', color=['#ff00ff', '#00ffcc'])\\nplt.title('Revenue por Categoría - RobertScience DS')\\nplt.ylabel('Revenue ($)')\\nplt.xticks(rotation=45)\\nplt.tight_layout()\\nplt.show()"], "outputs": []},
+                {"cell_type": "markdown", "source": ["## Recomendaciones\\nPriorizar stock en categorías top para uplift 15%. Desarrollado por RobertScience DS.\\nContacto: robertscience.ia@gmail.com"]}
             ],
             "metadata": {"kernelspec": {"name": "python3", "display_name": "Python 3"}},
             "nbformat": 4, "nbformat_minor": 5
@@ -250,11 +265,13 @@ def download_work(upload_id):
             summary = json.load(f)
         for filename, info in summary['files'].items():
             if 'DIM' in filename and not info.get('error'):
-                dim_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, os.path.basename(info['json_url']))
-                with open(dim_json_path, 'r') as f:
-                    dim_str = f.read()
-                dim_df = pd.read_json(StringIO(dim_str), lines=True)
-                zf.writestr(f"{filename.replace('.xlsx', '')}.csv", dim_df.to_csv(index=False))
+                base_name_dim = os.path.basename(info['file_url']).lower().replace('.xlsx', '').replace('.csv', '') + '.json'
+                dim_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_dim)
+                if os.path.exists(dim_json_path):
+                    with open(dim_json_path, 'r') as f:
+                        dim_str = f.read()
+                    dim_df = pd.read_json(StringIO(dim_str), lines=True)  # Fix: Quita low_memory=False
+                    zf.writestr(f"{os.path.splitext(filename)[0]}.csv", dim_df.to_csv(index=False))
     
     memory_file.seek(0)
     return send_file(memory_file, as_attachment=True, download_name='RobertScience_Turbo_Preview.zip', mimetype='application/zip')
