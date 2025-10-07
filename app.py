@@ -157,7 +157,7 @@ def get_upload_summary(upload_id):
 def preview_page():
     return render_template('preview/index.html')
 
-# Función para Get Diff Data (Integrada, Unlimited Chunks – Graceful, No low_memory)
+# Función para Get Diff Data (Integrada, Unlimited Chunks – Final Graceful, No low_memory)
 def get_diff_data(upload_id, step='raw'):
     try:
         summary_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, 'summary.json')
@@ -180,9 +180,9 @@ def get_diff_data(upload_id, step='raw'):
             fact_lines = f.readlines()
         before_str = ''.join(fact_lines)
         
-        fact_df = pd.read_json(StringIO(before_str), lines=True)  # Graceful: No low_memory
+        fact_df = pd.read_json(StringIO(before_str), lines=True)  # Final: No low_memory
         
-        # Aplica step with try/except for graceful merges
+        # Aplica step with try/except graceful for merges
         if step == 'limpio':
             fact_df = fact_df.dropna(subset=['ITEM_CODE']).drop_duplicates()
         elif step == 'merged':
@@ -196,7 +196,7 @@ def get_diff_data(upload_id, step='raw'):
                     if os.path.exists(prod_json_path):
                         with open(prod_json_path, 'r') as f:
                             prod_lines = f.readlines()
-                        prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True)  # Graceful: No low_memory
+                        prod_df = pd.read_json(StringIO(''.join(prod_lines)), lines=True)  # Final: No low_memory
                         fact_df = pd.merge(fact_df, prod_df, left_on='ITEM_CODE', right_on='ITEM', how='left')
                         logger.debug(f"Merge PRODUCT: {fact_df.shape[0]} rows")
                     else:
@@ -213,7 +213,7 @@ def get_diff_data(upload_id, step='raw'):
                     if os.path.exists(cat_json_path):
                         with open(cat_json_path, 'r') as f:
                             cat_lines = f.readlines()
-                        cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True)  # Graceful: No low_memory
+                        cat_df = pd.read_json(StringIO(''.join(cat_lines)), lines=True)  # Final: No low_memory
                         fact_df = pd.merge(fact_df, cat_df, on='CATEGORY', how='left')
                         logger.debug(f"Merge CATEGORY: {fact_df.shape[0]} rows")
                     else:
@@ -221,7 +221,41 @@ def get_diff_data(upload_id, step='raw'):
             except Exception as e:
                 logger.error(f"Merge CATEGORY fail: {str(e)}")
             
-            # Similar for SEGMENT and CALENDAR (graceful skip if fail)
+            # Try merge DIM_SEGMENT
+            try:
+                seg_file = next((f for f in summary['files'].values() if 'DIM_SEGMENT' in f['file_url']), None)
+                if seg_file:
+                    base_name_seg = os.path.basename(seg_file['file_url']).lower().replace('.xlsx', '') + '.json'
+                    seg_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_seg)
+                    if os.path.exists(seg_json_path):
+                        with open(seg_json_path, 'r') as f:
+                            seg_lines = f.readlines()
+                        seg_df = pd.read_json(StringIO(''.join(seg_lines)), lines=True)  # Final: No low_memory
+                        key_seg = ['CATEGORY', 'FORMAT']
+                        if all(col in fact_df.columns for col in key_seg) and all(col in seg_df.columns for col in key_seg):
+                            fact_df = pd.merge(fact_df, seg_df, on=key_seg, how='left')
+                        logger.debug(f"Merge SEGMENT: {fact_df.shape[0]} rows")
+                    else:
+                        logger.warning(f"SEG JSON not found: {seg_json_path}")
+            except Exception as e:
+                logger.error(f"Merge SEGMENT fail: {str(e)}")
+            
+            # Try merge DIM_CALENDAR
+            try:
+                cal_file = next((f for f in summary['files'].values() if 'DIM_CALENDAR' in f['file_url']), None)
+                if cal_file:
+                    base_name_cal = os.path.basename(cal_file['file_url']).lower().replace('.xlsx', '') + '.json'
+                    cal_json_path = os.path.join(app.config['UPLOAD_FOLDER'], upload_id, base_name_cal)
+                    if os.path.exists(cal_json_path):
+                        with open(cal_json_path, 'r') as f:
+                            cal_lines = f.readlines()
+                        cal_df = pd.read_json(StringIO(''.join(cal_lines)), lines=True)  # Final: No low_memory
+                        fact_df = pd.merge(fact_df, cal_df, on='WEEK', how='left')
+                        logger.debug(f"Merge CALENDAR: {fact_df.shape[0]} rows")
+                    else:
+                        logger.warning(f"CAL JSON not found: {cal_json_path}")
+            except Exception as e:
+                logger.error(f"Merge CALENDAR fail: {str(e)}")
         elif step == 'transform':
             fact_df['WEEK'] = pd.to_datetime(fact_df['WEEK'], errors='coerce')
             if 'ITEM_DESCRIPTION' in fact_df.columns:
