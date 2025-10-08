@@ -22,6 +22,7 @@
                 </div>
             </div>
         </header>
+        <div id="loading" class="text-center text-neon mt-3 d-none"><i class="fas fa-spinner fa-spin"></i> Rockeando datos...</div>
         <div id="viewer" class="d-none h-75">
             <div class="row m-0">
                 <div class="col-md-6 p-2">
@@ -48,31 +49,33 @@
         function loadViewer() {
             let link = $('#linkInput').val().trim();
             if (!link) return alert('¡Pega el enlace DS, rockstar!');
-            // Parse para upload_id y step
             let urlMatch = link.match(/diff\/([a-f0-9-]+)/i);
             if (!urlMatch) return alert('Enlace inválido – busca /diff/uuid');
             uploadId = urlMatch[1];
             let params = new URLSearchParams(link.split('?')[1] || '');
             step = params.get('step') || 'merged';
+            $('#loading').removeClass('d-none');
             $.getJSON(`/diff/${uploadId}/data?step=${step}`, function(data) {
+                $('#loading').addClass('d-none');
                 if (data.error) return alert('Error loading: ' + data.error);
                 renderDiff(data);
                 $('#viewer, #footer').removeClass('d-none');
                 $('#searchBar').on('keyup', filterAndJump);
-                $('.rock-header').addClass('rock-loaded');  // Anim on load
-            }).fail(() => alert('Fail loading – chequea ID'));
+                $('.rock-header').addClass('rock-loaded');
+            }).fail(function(jqXHR) {
+                $('#loading').addClass('d-none');
+                alert('Fail loading – chequea ID o logs: ' + (jqXHR.responseJSON?.error || 'Server error'));
+            });
         }
 
         function renderDiff(data) {
-            let beforeRows = data.before.split('\n').filter(r => r).map(JSON.parse);
-            let afterRows = data.after.split('\n').filter(r => r).map(JSON.parse);
-            renderChunk('#beforeView', beforeRows.slice(0, 1000), 'gray-row');  // Chunk initial
-            renderChunk('#afterView', afterRows.slice(0, 1000), 'change-highlight');  // Highlights
-            // Sync & infinite
+            let beforeRows = data.before ? data.before.split('\n').filter(r => r).map(JSON.parse) : [];
+            let afterRows = data.after ? data.after.split('\n').filter(r => r).map(JSON.parse) : [];
+            renderChunk('#beforeView', beforeRows.slice(0, 1000), 'gray-row');
+            renderChunk('#afterView', afterRows.slice(0, 1000), 'change-highlight');
             $('#beforeView, #afterView').on('scroll', syncScroll);
             $('.cyber-scroll, .electric-scroll').on('scroll', infiniteLoad);
-            // Stats
-            $('.rock-footer p').append(` | Rows: ${data.stats.rows_after} Rocked`);
+            $('.rock-footer p').text(`RobertScience DS - Turbo Validación Interna | Rows: ${data.stats.rows_after} | Match: ${data.match_rate.toFixed(1)}%`);
         }
 
         function renderChunk(container, rows, className) {
@@ -80,11 +83,11 @@
             rows.forEach((row, i) => {
                 let rowClass = className;
                 if (className === 'change-highlight') {
-                    if ('REVENUE' in row) rowClass += ' text-success rock-glow';  // Verde electric
-                    else if (row.ITEM_CODE && row.ITEM_CODE !== 'null') rowClass += ' text-warning flash-yellow';  // Amarillo mod
-                    else rowClass += ' text-danger pulse-red';  // Rojo drop
+                    if ('REVENUE' in row) rowClass += ' text-success rock-glow';
+                    else if (row.ITEM_DESCRIPTION && row.ITEM_DESCRIPTION !== row.ITEM_DESCRIPTION.toLowerCase()) rowClass += ' text-warning flash-yellow';
+                    else if (row.ITEM_CODE === null || row.ITEM_CODE === 'null') rowClass += ' text-danger pulse-red';
                 }
-                html += `<tr class="${rowClass}"><td>${i}</td><td>${JSON.stringify(row)}</td></tr>`;
+                html += `<tr class="${rowClass}" data-row="${JSON.stringify(row)}"><td>${i + 1}</td><td>${JSON.stringify(row)}</td></tr>`;
             });
             html += '</tbody></table>';
             $(container).html(html);
@@ -97,17 +100,18 @@
 
         function infiniteLoad() {
             if ($(this).scrollTop() + $(this).height() >= $(this)[0].scrollHeight - 100) {
-                // Load next chunk AJAX (sim for now, expand backend)
                 console.log('Loading more rock...');
             }
         }
 
         function filterAndJump() {
             let query = $('#searchBar').val().toLowerCase();
-            $('tr').show().filter(function() { return !$(this).text().toLowerCase().includes(query); }).hide();
+            $('tr').show().filter(function() {
+                return !JSON.parse($(this).attr('data-row')).ITEM_CODE?.toLowerCase().includes(query);
+            }).hide();
             let firstMatch = $('tr:visible').first();
             if (firstMatch.length) {
-                $('#beforeView').scrollTop(firstMatch.position().top - 100);  // Jump rock
+                $('#beforeView').scrollTop(firstMatch.position().top - 100);
             }
         }
 
