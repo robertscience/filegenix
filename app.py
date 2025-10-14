@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 import pandas as pd
 import os
@@ -63,7 +63,7 @@ def upload_files():
     for file in files:
         if file and allowed_file(file.filename):
             original_filename = file.filename
-            filename = original_filename  # Mantenemos el nombre original
+            filename = original_filename  # Mantenemos el nombre original siempre
             if filename in seen_filenames:
                 logger.warning(f"Archivo duplicado ignorado: {original_filename}")
                 results[original_filename] = {'error': 'Duplicate file name'}
