@@ -3,157 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RobertScience - FileGenix</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>FileGenix - Subir Archivos</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+        .container { max-width: 600px; margin: auto; }
+        .upload-box { border: 2px dashed #ccc; padding: 20px; margin-top: 20px; }
+        input[type="file"] { margin: 10px 0; }
+        button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; cursor: pointer; }
+        button:hover { background-color: #45a049; }
+        #result { margin-top: 20px; color: #333; }
+    </style>
 </head>
 <body>
-    <div class="d-flex flex-column min-vh-100 justify-content-center align-items-center">
-        <div class="container text-center">
-            <h1 class="mb-4">RobertScience FileGenix ⚡</h1>
-            <p class="text-neon mb-4">Sube tus archivos CSV o Excel y obtén un enlace para procesar los datos.</p>
-            <div class="upload-area" id="uploadArea">
-                <input type="file" id="fileInput" multiple accept=".csv,.xlsx,.xls" class="form-control">
-                <p id="uploadText">Arrastra tus archivos aquí o selecciona para subir.</p>
-            </div>
-            <button class="btn btn-neon mt-3" onclick="uploadFiles()">Subir Archivos</button>
-            <div id="preview" class="mt-4"></div>
-            <div id="summaryLink" class="mt-3"></div>
-            <div id="toast" class="toast align-items-center text-white bg-dark border-neon" role="alert" aria-live="assertive" aria-atomic="true">
-                <div class="d-flex">
-                    <div class="toast-body"></div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                </div>
-            </div>
+    <div class="container">
+        <h1>FileGenix - Subir Archivos para RobertScience</h1>
+        <div class="upload-box">
+            <p>Sube tus archivos CSV o Excel (máximo 512 MB):</p>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <input type="file" name="files" multiple accept=".csv,.xlsx,.xls">
+                <br>
+                <button type="submit">Subir Archivos</button>
+            </form>
+            <div id="result"></div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
     <script>
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const uploadText = document.getElementById('uploadText');
-        const preview = document.getElementById('preview');
-        const summaryLink = document.getElementById('summaryLink');
-        const toast = document.getElementById('toast');
-        const toastBody = toast.querySelector('.toast-body');
-        const bootstrapToast = new bootstrap.Toast(toast);
-
-        uploadArea.addEventListener('dragover', (e) => {
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            uploadArea.classList.add('highlight');
-            uploadText.textContent = '¡Suelta tus archivos aquí!';
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('highlight');
-            uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('highlight');
-            uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
-            fileInput.files = e.dataTransfer.files;
-        });
-
-        async function uploadFiles() {
-            const files = fileInput.files;
-            if (files.length === 0) {
-                showToast('Por favor, selecciona al menos un archivo.', 'error');
-                return;
-            }
-
-            const fileNames = new Set();
-            const uniqueFiles = [];
-            for (let file of files) {
-                if (fileNames.has(file.name)) {
-                    showToast(`Archivo duplicado: ${file.name}`, 'error');
-                    continue;
-                }
-                fileNames.add(file.name);
-                uniqueFiles.push(file);
-            }
-
-            if (uniqueFiles.length === 0) {
-                showToast('No se seleccionaron archivos válidos.', 'error');
-                return;
-            }
-
-            const formData = new FormData();
-            for (let file of uniqueFiles) {
-                formData.append('files', file);
-            }
-
-            uploadText.innerHTML = '<i class="fas fa-spinner fa-spin text-neon"></i> Subiendo...';
+            const formData = new FormData(e.target);
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Subiendo...';
 
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
                     body: formData
                 });
-                const result = await response.json();
-                uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
-
+                const data = await response.json();
                 if (response.ok) {
-                    showToast('Archivos subidos con éxito.', 'success');
-                    let html = `<h3 class="text-neon">Archivos Subidos:</h3><div class="row mt-3 g-3">`;
-                    for (const [filename, data] of Object.entries(result.files)) {
-                        const truncatedName = filename.length > 15 ? filename.substring(0, 12) + '...' : filename;
-                        if (data.error) {
-                            html += `
-                                <div class="col-6 col-md-2 text-center">
-                                    <i class="fas fa-folder text-danger fa-3x folder-icon" data-bs-toggle="tooltip" title="${filename}: ${data.error}"></i>
-                                    <p class="text-danger">${truncatedName}</p>
-                                    <p class="text-danger small">${data.error}</p>
-                                </div>
-                            `;
-                        } else {
-                            html += `
-                                <div class="col-6 col-md-2 text-center">
-                                    <i class="fas fa-folder text-neon fa-3x folder-icon" data-bs-toggle="tooltip" title="${filename}"></i>
-                                    <p>${truncatedName}</p>
-                                </div>
-                            `;
-                        }
-                    }
-                    html += '</div>';
-                    preview.innerHTML = html;
-
-                    summaryLink.innerHTML = `
-                        <h4 class="text-neon mt-3">Enlace para los datos:</h4>
-                        <a href="${result.summary_url}" target="_blank" class="text-neon">${result.summary_url}</a>
-                        <button class="btn btn-neon mt-2" onclick="copyToClipboard('${result.summary_url}')">Copiar enlace</button>
-                    `;
-
-                    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-                    tooltipTriggerList.map(function (tooltipTriggerEl) {
-                        return new bootstrap.Tooltip(tooltipTriggerEl);
-                    });
+                    resultDiv.innerHTML = `Subida exitosa! Enlace interno: <a href="${data.summary_url}" target="_blank">${data.summary_url}</a>`;
                 } else {
-                    showToast('Error al subir archivos: ' + result.error, 'error');
+                    resultDiv.innerHTML = `Error: ${data.error}`;
                 }
             } catch (error) {
-                uploadText.textContent = 'Arrastra tus archivos aquí o selecciona para subir.';
-                showToast('Error al subir archivos: ' + error.message, 'error');
+                resultDiv.innerHTML = `Error: ${error.message}`;
             }
-        }
-
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('Enlace copiado al portapapeles.', 'success');
-            }).catch(() => {
-                showToast('Error al copiar el enlace.', 'error');
-            });
-        }
-
-        function showToast(message, type) {
-            toast.classList.remove('border-neon-success', 'border-neon-error');
-            toast.classList.add(type === 'success' ? 'border-neon-success' : 'border-neon-error');
-            toastBody.textContent = message;
-            bootstrapToast.show();
-        }
+        });
     </script>
 </body>
 </html>

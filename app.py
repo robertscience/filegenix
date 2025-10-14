@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, render_template
+from werkzeug.utils import secure_filename
 import pandas as pd
 import os
 import uuid
@@ -36,8 +37,8 @@ def validate_xlsx(file_path, filename):
 
 @app.route('/')
 def index():
-    logger.debug("Accediendo a la ruta raíz")
-    return jsonify({'message': 'API para procesamiento interno de FileGenix'})
+    logger.debug("Accediendo a la ruta raíz con interfaz")
+    return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_files():
